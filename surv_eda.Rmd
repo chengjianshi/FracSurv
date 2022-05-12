@@ -1,0 +1,109 @@
+---
+title: "surv_eda"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(survival)
+```
+
+## 1. MOF
+
+```{r}
+data = read.csv("surv_data_MOF.csv")
+data$status = as.integer(as.logical(data$status))
+attach(data)
+
+# time histogram 
+hist(data$time)
+table(data$status)
+```
+
+### 1.1 KM-model 
+
+```{r}
+km.model = survfit(Surv(time, status) ~ 1, type = "kaplan-meier")
+summary(km.model)
+
+plot(km.model, confi.inf = F, xlab = "Time(year)", ylab = "S(t)", main = "KM-model", ylim = c(0.95, 1))
+```
+
+### 1.2 KM-model ~ gender 
+
+```{r}
+table(male)
+km.model.g = survfit(Surv(time, status) ~ male, type = "kaplan-meier")
+summary(km.model.g)
+plot(km.model.g, confi.inf = F, xlab = "Time(year)", ylab = "S(t)", main = "KM-model", ylim = c(0.96, 1), col = c("red", "blue"), las = 1, lwd=2, mark.time=T)
+legend("bottomleft", legend = c("female", "male"), col = c("red", "blue"), lty=1, lwd=2, cex = 2)
+
+survdiff(Surv(time, status) ~ male)
+```
+
+### 1.2 KM-model ~ race 
+
+```{r}
+table(race)
+km.model.r = survfit(Surv(time, status) ~ race, type = "kaplan-meier")
+summary(km.model.r)
+plot(km.model.r, confi.inf = F, xlab = "Time(year)", ylab = "S(t)", main = "KM-model", ylim = c(0.96, 1), col = c("red", "blue", "brown", "green"), las = 1, lwd=2, mark.time=T)
+legend("bottomleft", legend = c("Caucasian", "Non-Hispanic Black", "Hispanic", "other"), col = c("red", "blue", "brown", "green"), lty=1)
+
+survdiff(Surv(time, status) ~ race)
+
+detach(data)
+```
+
+## 2. Hip 
+
+```{r}
+data = read.csv("surv_data_hip.csv")
+data$status = as.integer(as.logical(data$status))
+attach(data)
+
+## plot distribution
+hist(data$time)
+table(data$status)
+```
+
+### 2.1 KM-model 
+
+```{r}
+km.model = survfit(Surv(time, status) ~ 1, type = "kaplan-meier")
+summary(km.model)
+
+plot(km.model, confi.inf = F, xlab = "Time(year)", ylab = "S(t)", main = "KM-model", ylim = c(0.99, 1))
+```
+
+### 2.2 KM-model ~ gender 
+
+```{r}
+
+table(male)
+km.model.g = survfit(Surv(time, status) ~ male, type = "kaplan-meier")
+summary(km.model.g)
+plot(km.model.g, confi.inf = F, xlab = "Time(year)", ylab = "S(t)", main = "KM-model", ylim = c(0.99, 1), col = c("red", "blue"), las = 1, lwd=2, mark.time=T)
+legend("bottomleft", legend = c("female", "male"), col = c("red", "blue"), lty=1, lwd=2, cex = 2)
+
+survdiff(Surv(time, status) ~ male)
+
+```
+
+### 2.3 KM-model ~ race 
+
+```{r}
+table(race)
+km.model.r = survfit(Surv(time, status) ~ race, type = "kaplan-meier")
+summary(km.model.r)
+plot(km.model.r, confi.inf = F, xlab = "Time(year)", ylab = "S(t)", main = "KM-model", ylim = c(0.99, 1), col = c("red", "blue", "brown", "green"), las = 1, lwd=2, mark.time=T)
+legend("bottomleft", legend = c("Caucasian", "Non-Hispanic Black", "Hispanic", "other"), col = c("red", "blue", "brown", "green"), lty=1)
+
+survdiff(Surv(time, status) ~ race)
+
+detach(data)
+```
