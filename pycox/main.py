@@ -10,8 +10,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader, TensorDataset
 from utils import read_config, preprocess_data, c_score, EarlyStopping
 from torch.utils.tensorboard import SummaryWriter
-from deepFrac import FracDeepSurv, FracAESurv
-from loss import LossAELogHaz
+from deepFrac import FracDeepSurv
 from pycox.models.loss import NLLLogistiHazardLoss
 
 SEED = 1234
@@ -21,17 +20,14 @@ _ = torch.manual_seed(SEED)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def train(config_file:Union[str, Path], log_dir: Union[str, Path]):
+def train(config_file: Union[str, Path], log_dir: Union[str, Path]):
     
     # load config
     config = read_config(config_file)   
-
     train_config = config['train']
     model_config = config['model']
-    
-    if (type(log_dir) == str):
-        log_dir = Path(log_dir)
-    
+    log_dir = Path(log_dir) if (type(log_dir) == str) else log_dir
+
     model_path = log_dir / 'best_model.pth'
     
     # preprocess data 
@@ -47,23 +43,10 @@ def train(config_file:Union[str, Path], log_dir: Union[str, Path]):
     out_features = labtrans.out_features
     
     # build model dims & loss func
-    if (train_config["model_type"] == "DeepSurv"):
-        model_config['dims'] = [in_features] + model_config['dims'] + [out_features]
-        loss_func = NLLLogistiHazardLoss()
+    model_config['dims'] = [in_features] + model_config['dims'] + [out_features]
+    loss_func = NLLLogistiHazardLoss()
+    net = FracDeepSurv(model_config).to(device)
         
-        net = FracDeepSurv(model_config).to(device)
-        
-    elif (train_config["model_type"] == "AE"):
-        model_config['survnet_dims'] += [out_features]
-        model_config['encoder_dims'] = [in_features] + model_config['encoder_dims']
-        model_config['decoder_dims'] += [in_features]
-        loss_func = LossAELogHaz(train_config['loss_alpha'])
-        
-        net = FracAESurv(model_config).to(device)
-        
-    else:
-        raise f"model type {train_config['model_type']} un-defined"
-
     # train 
     epochs = train_config['num_epochs']
     batch_size = train_config['batch_size'] if train_config['batch_size'] > 0 else x_train.shape[0]
@@ -98,16 +81,9 @@ def train(config_file:Union[str, Path], log_dir: Union[str, Path]):
             
             optimizer.zero_grad()
             output = net(x)
-            
-            if (train_config['model_type'] == 'DeepSurv'):
-                loss = loss_func(output, t, e)
-            elif (train_config['model_type'] == 'AE'):
-                phi, decoded = output
-                loss = loss_func(phi, decoded, (t, e), x)
-                output = phi
-            
-            loss += l1_reg(net)
-            
+                        
+            loss = loss_func(output, t, e) + l1_reg(net)
+
             loss.backward()
             optimizer.step()
             
@@ -123,15 +99,7 @@ def train(config_file:Union[str, Path], log_dir: Union[str, Path]):
         net.eval()
         with torch.no_grad():
             output = net(x_test)
-            if (train_config['model_type'] == 'DeepSurv'):
-                loss = loss_func(output, y_test_duration, y_test_event)
-            elif (train_config['model_type'] == 'AE'):
-                phi, decoded = output
-                loss = loss_func(phi, decoded, (y_test_duration, y_test_event), x_test)
-                output = phi
-                
-            loss += l1_reg(net)
-            
+            loss = loss_func(output, y_test_duration, y_test_event) + l1_reg(net)
             test_loss = loss.item()
             test_c_score = c_score(output, y_test_duration, y_test_event, labtrans)
         
@@ -152,20 +120,15 @@ def train(config_file:Union[str, Path], log_dir: Union[str, Path]):
             break
     
     # metrics
-    best_model = FracDeepSurv(model_config).to(device) if train_config['model_type'] == 'DeepSurv' else FracAESurv(model_config).to(device)
+    best_model = FracDeepSurv(model_config).to(device)
     best_model.load_state_dict(torch.load(model_path))
     best_model.eval()
     with torch.no_grad():
         output_train = best_model(x_train)
         output_test = best_model(x_test)
-        
-        output_train = output_train if train_config['model_type'] == 'DeepSurv' else output_train[0]
-        output_test = output_test if train_config['model_type'] == 'DeepSurv' else output_test[0]
-        
         train_c_score = c_score(output_train, y_train_duration, y_train_event, labtrans)
         test_c_score = c_score(output_test, y_test_duration, y_test_event, labtrans)
 
-    
     for key in model_config:
         if ('dims' in key):
             model_config[key] = ','.join([str(elem) for elem in model_config[key]])
